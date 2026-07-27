@@ -1,0 +1,42 @@
+# Local environment and credentials
+.env
+.env.local
+.venv/
+venv/
+
+# Python caches and build products
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Notebook, plotting, and editor state
+.ipynb_checkpoints/
+.matplotlib/
+.idea/
+.vscode/
+
+# Private inputs and generated analysis artefacts
+data/raw/
+data/private/
+analysis_results/
+outputs/
+*.xlsx
+*.xls
+*.parquet
+*.pkl
+*.pickle
+*.docx
+*.pdf
+*.png
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+*.log
