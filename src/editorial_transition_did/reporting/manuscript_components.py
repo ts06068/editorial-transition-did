@@ -12,6 +12,8 @@ from .word import (
 )
 
 
+# Keep manuscript-specific missing-value and precision rules in one place so
+# every Word table presents the same underlying estimate consistently.
 def _word_number(value: object, digits: int = 2) -> str:
     numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     return "NA" if not np.isfinite(numeric) else f"{float(numeric):.{digits}f}"
@@ -46,6 +48,8 @@ def _category_word_header() -> tuple[
     list[tuple[int, int, int, int]],
     list[tuple[int, int, int]],
 ]:
+    # NORA is a spanning header: its three child categories occupy the second
+    # header row, while the other categories span both rows.
     headers = [
         [
             "Publication cohort",
@@ -73,10 +77,14 @@ def _did_word_blocks(
     frame: pd.DataFrame,
     include_specification: bool,
 ) -> list[ManuscriptWordBlock]:
+    # Separate the observed journal cells from the DiD contrast so readers can
+    # audit how the reported effect was assembled.
     panel_a_rows: list[ManuscriptWordRow] = []
     panel_b_rows: list[ManuscriptWordRow] = []
     for _, row in frame.iterrows():
         specification = str(row.get("display_label", row.get("analysis", "")))
+        # Robustness tables identify each specification; the primary table has
+        # one specification and therefore omits that redundant column.
         prefix = (specification,) if include_specification else ()
         panel_a_rows.append(
             ManuscriptWordRow(
@@ -154,6 +162,8 @@ def _did_word_blocks(
 def _period_composition_word_block(data: pd.DataFrame) -> ManuscriptWordBlock:
     rows: list[ManuscriptWordRow] = []
     for journal in [JOURNAL_DISPLAY[key] for key in JOURNAL_ORDER]:
+        # A dedicated group row keeps journal boundaries visible without
+        # repeating the journal name on every period-category row.
         rows.append(ManuscriptWordRow((journal, "", ""), kind="group"))
         journal_data = data[data["journal"].eq(journal)].copy()
         journal_data["category_order"] = journal_data["category"].map(
@@ -178,6 +188,8 @@ def _period_citation_word_block(data: pd.DataFrame) -> ManuscriptWordBlock:
     for journal in [JOURNAL_DISPLAY[key] for key in JOURNAL_ORDER]:
         rows.append(ManuscriptWordRow((journal, "", "", "", "", ""), kind="group"))
         journal_data = data[data["journal"].eq(journal)].copy()
+        # Explicit ordering prevents pandas' lexical sort from changing the
+        # prespecified manuscript category order.
         journal_data["category_order"] = journal_data["category"].map(
             {category: index for index, category in enumerate(CATEGORY_ORDER)}
         )
@@ -216,6 +228,7 @@ def _period_citation_word_block(data: pd.DataFrame) -> ManuscriptWordBlock:
 def _forecast_word_block(forecast_summary: pd.DataFrame) -> ManuscriptWordBlock:
     rows: list[ManuscriptWordRow] = []
     category_order = {category: index for index, category in enumerate(CATEGORY_ORDER)}
+    # Display horizons chronologically rather than relying on input row order.
     horizon_order = {"C15": 0, "C18": 1, "C24": 2}
     for journal_code in JOURNAL_ORDER:
         journal = JOURNAL_DISPLAY[journal_code]
@@ -225,6 +238,8 @@ def _forecast_word_block(forecast_summary: pd.DataFrame) -> ManuscriptWordBlock:
         subset["horizon_order"] = subset["target"].map(horizon_order)
         subset = subset.sort_values(["category_order", "horizon_order"])
         for _, row in subset.iterrows():
+            # Observed values are only comparable once the corresponding
+            # follow-up horizon is complete; otherwise retain the denominator.
             observed = (
                 f"{row['observed_mean_if_complete']:.2f} ({int(row['observed_complete_n'])})"
                 if np.isfinite(row["observed_mean_if_complete"])

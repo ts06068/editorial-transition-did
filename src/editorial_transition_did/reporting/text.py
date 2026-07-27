@@ -5,6 +5,7 @@ from ..config import ANALYSIS_CUTOFF, PRIMARY_WINDOW, AnalysisPaths
 
 def write_figure_legends(paths: AnalysisPaths) -> None:
     """Write the complete main and supplemental figure legends."""
+    # Keep legend paragraphs in figure order so the file can be pasted directly into a manuscript.
     text = (
         "Figure Legends\n\n"
         "Figure 1. Temporal trends in observed mean 1-year citation counts\n"
@@ -60,11 +61,13 @@ def write_figure_legends(paths: AnalysisPaths) -> None:
         "GSS, guideline, statement, and statistics; DiD, difference-in-differences; CI, confidence "
         "interval.\n"
     )
+    # UTF-8 preserves typographic symbols and journal names across operating systems.
     (paths.output_dir / "Figure_Legends.txt").write_text(text, encoding="utf-8")
 
 
 def write_results_readme(paths: AnalysisPaths) -> None:
     """Write methodological notes alongside the generated results."""
+    # This output-level README records analysis choices; it is separate from repository setup docs.
     text = (
         "# Editorial board natural-experiment analysis results\n\n"
         f"Analysis cutoff: {ANALYSIS_CUTOFF:%Y-%m-%d}\n\n"
@@ -92,4 +95,5 @@ def write_results_readme(paths: AnalysisPaths) -> None:
         "quarterly, robustness, model-fold, and article-level forecast outputs are in the "
         "supplementary folders and cache.\n"
     )
+    # Write beside the tables and figures so exported result bundles remain self-describing.
     (paths.output_dir / "README.md").write_text(text, encoding="utf-8")

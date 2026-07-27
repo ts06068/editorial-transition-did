@@ -47,7 +47,12 @@ def build_manuscript_word_table_specs(
     validation: pd.DataFrame,
     paths: AnalysisPaths,
 ) -> tuple[list[ManuscriptWordTable], list[ManuscriptWordTable]]:
+    # This function declares table content and layout only. The Word renderer
+    # consumes these specs later, keeping statistical logic out of OOXML code.
     category_headers, category_merges, category_underlines = _category_word_header()
+
+    # Table 1 is a denominator audit: atomic categories are displayed beside
+    # the overall count for every journal-cohort combination.
     table_1_rows: list[ManuscriptWordRow] = []
     for journal in JOURNAL_ORDER:
         table_1_rows.append(
@@ -84,6 +89,8 @@ def build_manuscript_word_table_specs(
         ],
     )
 
+    # Reuse one row layout across four panels so central tendency, eligibility,
+    # and zero-citation counts stay aligned category by category.
     table_2_blocks: list[ManuscriptWordBlock] = []
     for panel_title, panel_key in [
         ("Panel A. Mean (SD)", "mean"),
@@ -133,6 +140,8 @@ def build_manuscript_word_table_specs(
         ],
     )
 
+    # The primary table intentionally pairs journal cells with the estimand;
+    # `_did_word_blocks` also supplies the same structure to sensitivity tables.
     table_3 = ManuscriptWordTable(
         output_path=paths.main_table_dir / "Table_3_primary_difference_in_differences.docx",
         title="Table 3. Primary difference-in-differences analysis of observed 1-year citations",
@@ -144,6 +153,8 @@ def build_manuscript_word_table_specs(
         ],
     )
 
+    # Prediction accuracy and calibration answer different questions and are
+    # therefore presented as separate panels from the same metric rows.
     table_4_a_rows: list[ManuscriptWordRow] = []
     table_4_b_rows: list[ManuscriptWordRow] = []
     for _, row in metrics.iterrows():
@@ -223,6 +234,8 @@ def build_manuscript_word_table_specs(
         ],
     )
 
+    # These caveats are shared by the concise main forecast table and its
+    # detailed supplemental counterpart.
     forecast_footnotes = [
         "Predictions use observed 1-year citation counts and article metadata after final model refitting through May 2024 publications.",
         "Mean 80% bounds summarize article-level empirical residual bounds and are not confidence intervals for the journal-level mean.",
@@ -236,6 +249,8 @@ def build_manuscript_word_table_specs(
     )
     main_specs = [table_1, table_2, table_3, table_4, table_5]
 
+    # Supplemental specs follow the analysis workflow: descriptive time slices,
+    # sensitivity analyses, prediction diagnostics, then provenance checks.
     supplemental_specs: list[ManuscriptWordTable] = []
     supplemental_specs.append(
         ManuscriptWordTable(
@@ -278,6 +293,8 @@ def build_manuscript_word_table_specs(
         )
     )
 
+    # Start with the common DiD panels, then expose each journal's raw cells so
+    # alternative control and cutoff choices can be inspected directly.
     raw_blocks = _did_word_blocks(robustness_raw, include_specification=True)
     for panel_letter, journal in zip(["C", "D", "E"], ["circ", "ehj", "jacc"], strict=False):
         journal_rows: list[ManuscriptWordRow] = []
@@ -323,6 +340,8 @@ def build_manuscript_word_table_specs(
         )
     )
 
+    # Log-scale models report both the fitted coefficient and its exponentiated,
+    # reader-friendly percentage interpretation.
     log_rows: list[ManuscriptWordRow] = []
     for _, row in robustness_log.iterrows():
         log_rows.append(
@@ -393,6 +412,8 @@ def build_manuscript_word_table_specs(
         )
     )
 
+    # Group fold diagnostics by horizon to make the temporal model-selection
+    # evidence traceable to each final forecast target.
     fold_a_rows: list[ManuscriptWordRow] = []
     fold_b_rows: list[ManuscriptWordRow] = []
     for horizon in HORIZONS:
@@ -506,6 +527,8 @@ def build_manuscript_word_table_specs(
         )
     )
 
+    # Publisher-only records remain visible for composition provenance even
+    # though absent Scopus matches cannot enter citation-based analyses.
     publisher_rows: list[ManuscriptWordRow] = []
     for journal in [JOURNAL_DISPLAY[key] for key in JOURNAL_ORDER]:
         publisher_rows.append(ManuscriptWordRow((journal, "", "", "", "", ""), kind="group"))
@@ -546,6 +569,8 @@ def build_manuscript_word_table_specs(
         )
     )
 
+    # Include machine-checked invariants in the supplement so a reader can see
+    # which assumptions were verified for this exact run.
     validation_rows = [
         ManuscriptWordRow(
             (

@@ -37,12 +37,14 @@ def test_monthly_period_assignment() -> None:
 
     result = add_period_columns(frame, "Monthly")
 
+    # Include a leap-year February to guard calendar-end boundary handling.
     assert result["period_label"].astype(str).tolist() == ["2024-01", "2024-02", "2025-07"]
     assert result["period_start"].dt.day.tolist() == [1, 1, 1]
     assert result["period_end"].dt.day.tolist() == [31, 29, 31]
 
 
 def test_raw_did_matches_hand_calculation() -> None:
+    # The synthetic values encode 6 - mean(2, 1) = 4.5 by construction.
     result = calculate_raw_did(
         make_sample_data(),
         PRIMARY_WINDOW,
@@ -74,6 +76,7 @@ def test_sample_run_writes_lightweight_outputs(tmp_path: Path) -> None:
         "sample_primary_did.csv",
         "sample_summary.json",
     }
+    # Check both the public output contract and a known statistical result.
     assert {path.name for path in output_dir.iterdir()} == expected_files
     assert all((output_dir / filename).stat().st_size > 0 for filename in expected_files)
     assert results["primary_did"].loc[0, "did"] == pytest.approx(4.5)
@@ -88,12 +91,14 @@ def test_notebook_is_output_free_and_portable() -> None:
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
 
     for cell in notebook["cells"]:
+        # Committed notebooks must not leak local execution state or generated results.
         assert "execution" not in cell.get("metadata", {})
         if cell["cell_type"] == "code":
             assert cell["execution_count"] is None
             assert cell["outputs"] == []
 
     source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    # Keep the notebook a thin package client with no machine-specific path bootstrap.
     assert "run_all(" in source
     assert "reload(" not in source
     assert "sys.path" not in source

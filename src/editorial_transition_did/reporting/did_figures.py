@@ -24,11 +24,13 @@ from .plotting import configure_plot_style, format_period_axis, save_figure
 
 def plot_figure_2(data: pd.DataFrame, primary_did: pd.DataFrame, paths: AnalysisPaths) -> None:
     configure_plot_style()
+    # Figure 2 pairs the observed overall change with category-specific DiD contrasts.
     overall = primary_did.loc[primary_did["category"].eq("Overall")].iloc[0]
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.8), gridspec_kw={"width_ratios": [0.9, 1.35]})
 
     axis = axes[0]
     x_values = np.array([0.0, 1.0])
+    # Small fixed offsets keep coincident confidence intervals legible without changing time.
     horizontal_jitter = {"circ": -0.035, "ehj": 0.0, "jacc": 0.035}
     for journal in JOURNAL_ORDER:
         means = np.array([overall[f"{journal}_pre_mean"], overall[f"{journal}_post_mean"]])
@@ -56,6 +58,7 @@ def plot_figure_2(data: pd.DataFrame, primary_did: pd.DataFrame, paths: Analysis
     axis.legend(loc="upper left")
 
     axis = axes[1]
+    # Use the prespecified category order rather than order inherited from model execution.
     forest = primary_did.set_index("category").loc[CATEGORY_ORDER].reset_index()
     y_values = np.arange(len(forest))[::-1]
     x_min, x_max = -15.0, 15.0
@@ -66,6 +69,7 @@ def plot_figure_2(data: pd.DataFrame, primary_did: pd.DataFrame, paths: Analysis
         if not np.isfinite(estimate):
             axis.text(0, y_value, "NA", ha="center", va="center", color="0.45", fontsize=8)
             continue
+        # Clip extreme intervals to a stable plotting range while arrowheads retain direction.
         clipped_estimate = float(np.clip(estimate, x_min, x_max))
         clipped_low = float(np.clip(low, x_min, x_max))
         clipped_high = float(np.clip(high, x_min, x_max))
@@ -114,6 +118,7 @@ def plot_figure_2(data: pd.DataFrame, primary_did: pd.DataFrame, paths: Analysis
 
 def plot_figure_3(raw: pd.DataFrame, log_results: pd.DataFrame, paths: AnalysisPaths) -> None:
     configure_plot_style()
+    # Grow the canvas with the longer robustness list so labels do not become compressed.
     figure_height = max(5.2, 1.6 + 0.36 * max(len(raw), len(log_results)))
     fig, axes = plt.subplots(1, 2, figsize=(11.5, figure_height))
     panels = [
@@ -137,6 +142,7 @@ def plot_figure_3(raw: pd.DataFrame, log_results: pd.DataFrame, paths: AnalysisP
         ),
     ]
     for axis, frame, estimate, low, high, xlabel, title in panels:
+        # Matplotlib draws y=0 at the bottom; reverse rows to show the analysis order top-down.
         display = frame.iloc[::-1].reset_index(drop=True)
         y_values = np.arange(len(display))
         errors = np.vstack(
@@ -190,12 +196,14 @@ def plot_pretrend_difference(
             .unstack("journal_code")
             .reset_index()
         )
+        # Equal journal weights match the primary DiD estimand; publication counts do not reweight it.
         grouped["control_mean"] = grouped[["circ", "ehj"]].mean(axis=1)
         grouped["jacc_minus_control"] = grouped["jacc"] - grouped["control_mean"]
         summaries.append(grouped)
     combined = pd.concat(summaries, ignore_index=True)
     monthly = combined[combined["frequency"].eq("Monthly")].sort_values("period_date").copy()
     pre = monthly[monthly["period_date"].lt(PRIMARY_INTERVENTION)].copy()
+    # Fit the diagnostic slope only on ordered, fully observed pre-intervention months.
     pre["month_index"] = np.arange(len(pre))
     trend = stats.linregress(pre["month_index"], pre["jacc_minus_control"])
     trend_info = {
@@ -206,6 +214,7 @@ def plot_pretrend_difference(
         "p_value": float(trend.pvalue),
     }
 
+    # Reuse the yearly-quarterly-monthly ordering used by the descriptive figures.
     fig, axes = plt.subplots(3, 1, figsize=(7.2, 8), sharex=False)
     for panel_index, (axis, frequency) in enumerate(zip(axes, FREQUENCY_ORDER, strict=False)):
         panel = combined[combined["frequency"].eq(frequency)].sort_values("period_date")

@@ -21,6 +21,7 @@ def assign_recent_cohort(data: pd.DataFrame) -> pd.Series:
     """Assign the prespecified June-May descriptive publication cohorts."""
 
     output = pd.Series(pd.NA, index=data.index, dtype="string")
+    # Cohorts deliberately start in June rather than following calendar years.
     for label, start, end, _ in COHORTS:
         output.loc[data["publication_date"].between(start, end, inclusive="both")] = label
     return output
@@ -36,6 +37,7 @@ def add_period_columns(
     output = data.copy()
     dates = pd.to_datetime(output[date_column], errors="coerce")
     if frequency == "Yearly":
+        # Reuse the prespecified June-May cohorts so annual plots and tables agree.
         temporary = pd.DataFrame({"publication_date": dates}, index=output.index)
         output["period_label"] = assign_recent_cohort(temporary)
         metadata = {
@@ -60,6 +62,7 @@ def add_period_columns(
         output["period_label"] = periods.astype("string")
         output["period_start"] = periods.dt.start_time
         output["period_end"] = periods.dt.end_time.dt.normalize()
+        # The middle month gives each quarter a stable plotting coordinate.
         output["period_date"] = periods.dt.start_time + pd.DateOffset(months=1)
     elif frequency == "Monthly":
         periods = dates.dt.to_period("M")
@@ -76,6 +79,8 @@ def add_period_columns(
 def complete_period_mask(data: pd.DataFrame, months: int) -> pd.Series:
     """Identify periods whose full follow-up finishes by the analysis cutoff."""
 
+    # Measure completeness from the end of the aggregation period, preventing a
+    # partly observed month or quarter from entering a fixed-horizon summary.
     return data["period_end"].map(
         lambda value: (
             value + pd.DateOffset(months=months) <= ANALYSIS_CUTOFF if pd.notna(value) else False
@@ -84,6 +89,8 @@ def complete_period_mask(data: pd.DataFrame, months: int) -> pd.Series:
 
 
 def _summary_values(values: pd.Series) -> dict[str, float | int]:
+    # Missing values represent administratively incomplete follow-up and therefore
+    # are excluded from both the eligible denominator and distribution summaries.
     clean = pd.to_numeric(values, errors="coerce").dropna()
     if clean.empty:
         return {
@@ -120,6 +127,8 @@ def build_composition_table(data: pd.DataFrame) -> pd.DataFrame:
             subset = journal_data[journal_data["cohort"].eq(cohort_label)]
             denominator = len(subset)
             for category in CATEGORY_ORDER:
+                # Overall and NORA are composite reporting rows; category percentages
+                # should be read independently rather than summed down the table.
                 count = int(category_mask(subset, category).sum())
                 rows.append(
                     {
@@ -154,6 +163,8 @@ def build_citation_summary(data: pd.DataFrame) -> pd.DataFrame:
                     outcome_type = "1-year citation"
                     display_cohort = cohort_label
                 else:
+                    # The newest cohort lacks uniform 12-month follow-up, so its row
+                    # is explicitly descriptive of citations accumulated by cutoff.
                     outcome = pd.to_numeric(subset["citations_at_snapshot"], errors="coerce").where(
                         subset["db_paper_id"].notna()
                     )
@@ -209,6 +220,7 @@ def build_period_summaries(data: pd.DataFrame) -> dict[str, pd.DataFrame]:
                         "period": period,
                         "category": category,
                         "total_n": count,
+                        # c12_obs is already censored to articles with complete follow-up.
                         **_summary_values(subset["c12_obs"]),
                     }
                 )

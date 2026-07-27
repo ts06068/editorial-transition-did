@@ -14,6 +14,10 @@ tests/                         Unit and smoke tests
 pyproject.toml                 Environment and tooling configuration
 ```
 
+## Code structure
+
+`config.py` defines study constants and paths; `data.py` builds the analysis cohort; `did.py` and `prediction.py` contain the statistical analyses; and `pipeline.py` coordinates the complete run. Output-specific code lives under `reporting/`, while `sample.py` and `tests/test_smoke.py` provide a private-data-free executable check.
+
 ## Environment
 
 Python 3.12 is required. Exact runtime and development dependency versions are defined in `pyproject.toml`. Sample mode is synthetic and database-free; full mode reads local settings from `.env`.

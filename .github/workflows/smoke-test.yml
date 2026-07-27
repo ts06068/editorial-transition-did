@@ -5,6 +5,7 @@ on:
   pull_request:
 
 permissions:
+  # The workflow only needs to read the checked-out repository.
   contents: read
 
 jobs:
@@ -23,4 +24,5 @@ jobs:
       - name: Run tests
         run: python -m pytest
       - name: Run sample analysis
+        # Exercise the installed CLI end to end without private study data or MSSQL.
         run: editorial-transition-did --mode sample

@@ -26,6 +26,7 @@ from .config import (
 )
 from .utils import normalize_doi, parse_issue_date
 
+# Columns retained from the manually reviewed classification workbook.
 ARTICLE_COLUMNS = [
     "journal_code",
     "journal",
@@ -47,6 +48,7 @@ ARTICLE_COLUMNS = [
     "final_classification_status",
 ]
 
+# Citation fields copied from the MSSQL extract after DOI/EID record linkage.
 DB_COLUMNS = [
     "db_paper_id",
     "db_eid",
@@ -105,6 +107,8 @@ def _connect(database: str) -> pymssql.Connection:
     )
 
 
+# The LEFT JOIN preserves papers with zero citations. Each landmark counts distinct
+# citing EIDs and is capped at the common analysis cutoff to avoid future leakage.
 DB_AGGREGATE_QUERY = """
 SELECT
     CAST(p.paper_id AS BIGINT) AS db_paper_id,
@@ -176,11 +180,14 @@ def _normalize_citation_records(frames: list[pd.DataFrame]) -> pd.DataFrame:
     combined["doi_norm"] = combined["db_doi"].map(normalize_doi)
     combined["db_eid"] = combined["db_eid"].astype("string").str.strip()
     combined["db_pub_date"] = pd.to_datetime(combined["db_pub_date"], errors="coerce")
+    # The refreshed database is authoritative for 2025 onward; the legacy database
+    # remains authoritative for earlier records where its historical coverage is stable.
     combined["db_priority"] = np.where(
         combined["db_pub_date"].ge(pd.Timestamp("2025-01-01")),
         np.where(combined["source_database_key"].eq("SCOPUS_DB_2026"), 0, 1),
         np.where(combined["source_database_key"].eq("SCOPUS_DB"), 0, 1),
     )
+    # DOI is the preferred cross-source identifier; EID retains DOI-missing papers.
     combined["record_key"] = np.where(
         combined["doi_norm"].notna(),
         "doi:" + combined["doi_norm"].fillna(""),
@@ -208,6 +215,8 @@ def query_citation_aggregates(
 
     load_dotenv(paths.env_file)
     cutoff_param = ANALYSIS_CUTOFF.strftime("%Y-%m-%d")
+    # The query has one cutoff placeholder for each of six landmarks plus the
+    # all-citations snapshot, followed by the inclusive publication-date bounds.
     params = tuple([cutoff_param] * 7) + (
         PUBLICATION_START.strftime("%Y-%m-%d"),
         (PUBLICATION_END + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
@@ -254,6 +263,8 @@ def _attach_database_columns(articles: pd.DataFrame, db: pd.DataFrame) -> pd.Dat
     output = articles.copy()
     article_eid = output["eid"].astype("string").str.strip()
     for column in DB_COLUMNS:
+        # Resolve each field independently: a DOI match may still have a missing
+        # attribute that is available from the article's EID-matched database row.
         doi_values = output["doi_norm"].map(by_doi[column])
         eid_values = article_eid.map(by_eid[column])
         output[column] = doi_values.where(doi_values.notna(), eid_values)
@@ -282,6 +293,8 @@ def build_analysis_dataset(
     """Purely derive the analysis fields after source records have been loaded."""
 
     data = _attach_database_columns(articles, db)
+    # HTML parsing is the slowest date fallback, so parse only unique files whose
+    # classification record lacks a cover date.
     issue_date_map = {
         value: parse_issue_date(value, root=Path(html_root))
         for value in tqdm(
@@ -290,6 +303,7 @@ def build_analysis_dataset(
         )
     }
     data["publisher_issue_date"] = data["html_file"].map(issue_date_map)
+    # Preserve the curated workbook date first, then use MSSQL and publisher HTML.
     data["publication_date"] = data["cover_date"]
     data["publication_date"] = data["publication_date"].where(
         data["publication_date"].notna(), data["db_pub_date"]
@@ -318,6 +332,8 @@ def build_analysis_dataset(
     data["is_nora"] = data["category"].isin(NORA_CATEGORIES)
 
     for months in [3, 6, 12, 15, 18, 24]:
+        # A landmark outcome is observed only after every article has had the full
+        # nominal follow-up by the shared administrative cutoff.
         complete = data["publication_date"].map(
             lambda value, months=months: (
                 value + pd.DateOffset(months=months) <= ANALYSIS_CUTOFF
@@ -328,9 +344,12 @@ def build_analysis_dataset(
         data[f"complete_{months}m"] = complete
         data[f"c{months}_obs"] = pd.to_numeric(data[f"c{months}"], errors="coerce").where(complete)
 
+    # Prediction models target citations accrued after the observed 12-month
+    # landmark, rather than relearning the already observed citation count.
     data["increment_3m"] = data["c15_obs"] - data["c12_obs"]
     data["increment_6m"] = data["c18_obs"] - data["c12_obs"]
     data["increment_12m"] = data["c24_obs"] - data["c12_obs"]
+    # Cohort years roll over in June to match the study's June-May reporting cycle.
     data["cohort_year"] = np.where(
         data["publication_date"].dt.month.ge(6),
         data["publication_date"].dt.year,
@@ -347,6 +366,8 @@ def build_analysis_dataset(
 def build_source_qa(articles: pd.DataFrame, data: pd.DataFrame) -> pd.DataFrame:
     """Build the original source and follow-up quality-assurance counts."""
 
+    # Negative increments are impossible under cumulative counting and therefore
+    # surface citation-linkage or source-refresh inconsistencies for review.
     qa_rows = [
         ("Classification rows for three journals", len(articles)),
         ("Analysis rows through 2026-06-30", len(data)),

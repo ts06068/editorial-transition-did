@@ -44,6 +44,7 @@ def make_sample_data() -> pd.DataFrame:
 
     rows: list[dict[str, object]] = []
     record_number = 0
+    # Cross the three journals, two periods, two dates, and two article types.
     for journal_code, journal_display in SAMPLE_JOURNALS.items():
         for period in ("pre", "post"):
             value_index = 0
@@ -53,6 +54,7 @@ def make_sample_data() -> pd.DataFrame:
                     c12 = citations[journal_code][period][value_index]
                     value_index += 1
                     record_id = f"sample-{journal_code}-{record_number:03d}"
+                    # Match the production cohort schema closely enough to exercise summaries.
                     rows.append(
                         {
                             "analysis_record_id": record_id,
@@ -94,6 +96,7 @@ def run_sample(
     destination.mkdir(parents=True, exist_ok=True)
 
     data = make_sample_data()
+    # Reuse production analysis functions so this run tests real integration boundaries.
     composition = build_composition_table(data)
     citations = build_citation_summary(data)
     period_summaries = build_period_summaries(data)
@@ -105,6 +108,7 @@ def run_sample(
                 category="Overall",
                 controls=("circ", "ehj"),
                 n_boot=bootstrap_repetitions,
+                # A fixed seed keeps local and CI smoke-test output reproducible.
                 seed=20260724,
             )
         ]
@@ -120,9 +124,11 @@ def run_sample(
         "sample_primary_did.csv": primary_did,
     }
     for filename, table in tables.items():
+        # CSV keeps smoke artefacts inspectable without spreadsheet dependencies.
         table.to_csv(destination / filename, index=False)
 
     did_row = primary_did.iloc[0]
+    # The JSON summary gives CI a compact, machine-readable completion record.
     summary = {
         "mode": "sample",
         "records": int(len(data)),
