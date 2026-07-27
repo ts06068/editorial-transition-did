@@ -2,33 +2,41 @@
 
 ## Study Objective
 
-Assess whether the 2024 JACC editorial transition changed 1-year citation impact for original research articles relative to Circulation and European Heart Journal using difference-in-differences analyses.
+Assess changes in observed 1-year citation impact after the 2024 JACC editorial transition relative to Circulation and European Heart Journal, overall and by article category, using difference-in-differences analyses. Private source data, credentials, and generated results are excluded.
 
 ## Folder structure
 
-```text
-src/editorial_transition_did/  Modular analysis package and CLI
-notebooks/                     Output-free analysis walkthrough
-tests/                         Unit and smoke tests
-.github/workflows/             Automated smoke test
-pyproject.toml                 Environment and tooling configuration
-```
+- `src/editorial_transition_did/`: reusable analysis package and CLI.
+- `src/editorial_transition_did/reporting/`: tables, figures, and manuscript files.
+- `notebooks/analysis.ipynb`: thin interactive wrapper around the full pipeline.
+- `tests/test_smoke.py`: private-data-free smoke tests.
+- `.github/workflows/smoke-test.yml`: automated CI checks.
+- `pyproject.toml` and `.env.example`: dependencies and local configuration template.
 
 ## Code structure
 
-`config.py` defines study constants and paths; `data.py` builds the analysis cohort; `did.py` and `prediction.py` contain the statistical analyses; and `pipeline.py` coordinates the complete run. Output-specific code lives under `reporting/`, while `sample.py` and `tests/test_smoke.py` provide a private-data-free executable check.
+- `cli.py` selects sample or full mode; `pipeline.py` runs the analysis stages in order.
+- `config.py` defines the study periods and paths; `data.py` builds the analysis cohort.
+- `summaries.py`, `did.py`, and `prediction.py` produce descriptive, DiD, and forecasting results.
+- `validation.py` checks analysis invariants; `reporting/` writes the final outputs.
+- `sample.py` generates deterministic synthetic data for local and CI testing.
 
 ## Environment
 
-Python 3.12 is required. Exact runtime and development dependency versions are defined in `pyproject.toml`. Sample mode is synthetic and database-free; full mode reads local settings from `.env`.
+- Python 3.12
+- Exact package versions are defined in `pyproject.toml`.
+- Sample mode requires no private data or database connection; full mode reads local settings from `.env`.
 
 ## How to run
 
 ```powershell
 python -m pip install -e ".[dev]"
-python -m ruff check .
+editorial-transition-did sample
 python -m pytest
-editorial-transition-did --mode sample
 ```
 
-For the full analysis, populate `.env` from `.env.example`, then run `editorial-transition-did --mode full`.
+For the full analysis, copy `.env.example` to `.env`, add the local workbook, HTML, and MSSQL settings, then run:
+
+```powershell
+editorial-transition-did full
+```
