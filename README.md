@@ -6,12 +6,44 @@ Estimate changes in observed 1-year citation impact after the 2024 JACC editoria
 
 ## Folder structure
 
-- `src/editorial_transition_did/`: analysis package and CLI.
-- `src/editorial_transition_did/reporting/`: table, figure, and document writers.
-- `notebooks/analysis.ipynb`: thin wrapper around the package pipeline.
-- `tests/test_smoke.py`: synthetic-data smoke tests.
-- `.github/workflows/smoke-test.yml`: CI workflow.
-- `pyproject.toml` and `.env.example`: dependency and configuration contracts.
+```text
+.
+├── src/editorial_transition_did/
+│   ├── __init__.py                  Public API and lazy pipeline entry
+│   ├── __main__.py                  python -m entry point
+│   ├── cli.py                       Sample/full command-line interface
+│   ├── config.py                    Study dates, windows, and paths
+│   ├── data.py                      Source linkage and analysis frame
+│   ├── did.py                       Primary and sensitivity DiD
+│   ├── pipeline.py                  End-to-end orchestration
+│   ├── prediction.py                Temporal validation and forecasts
+│   ├── reporting/
+│   │   ├── __init__.py              Reporting API
+│   │   ├── descriptive_figures.py   Composition and citation plots
+│   │   ├── did_figures.py           DiD and pretrend plots
+│   │   ├── excel.py                 Excel table writers
+│   │   ├── manuscript_components.py Manuscript cell and row builders
+│   │   ├── manuscript_tables.py     Manuscript table specifications
+│   │   ├── plotting.py              Shared plot style and export
+│   │   ├── prediction_figures.py    Validation and forecast plots
+│   │   ├── text.py                  Figure legends and result notes
+│   │   └── word.py                  Word/OOXML table renderer
+│   ├── sample.py                    Deterministic synthetic analysis
+│   ├── summaries.py                 Descriptive summary tables
+│   ├── utils.py                     Shared parsing and formatting helpers
+│   └── validation.py                Analysis checks and output manifest
+├── notebooks/
+│   └── analysis.ipynb               Thin pipeline runner
+├── tests/
+│   └── test_smoke.py                Synthetic-data smoke tests
+├── .github/workflows/
+│   └── smoke-test.yml               CI lint, tests, and sample run
+├── .env.example                     Full-mode settings template
+├── .gitattributes                   Line-ending and binary-file rules
+├── .gitignore                       Private data and output exclusions
+├── pyproject.toml                   Dependencies, CLI, and tool settings
+└── README.md                        Study and execution guide
+```
 
 ## Code structure
 
