@@ -42,13 +42,11 @@ def run_all(
     configure_plot_style()
 
     stages = tqdm(total=8, desc="CLEAR-CARD analysis")
-    # Stage 1: build the canonical article-level frame once; downstream modules
-    # consume this shared representation rather than repeating source logic.
+    # Build one canonical frame so every analysis uses the same cohort definitions.
     data, source_qa = prepare_analysis_data(paths, force_refresh_db=force_refresh_db)
     stages.update(1)
 
-    # Stage 2: descriptive outputs establish denominators and follow-up coverage
-    # before any causal or predictive estimates are introduced.
+    # Report denominators and follow-up coverage before model-based results.
     composition = build_composition_table(data)
     citations = build_citation_summary(data)
     period_summaries = build_period_summaries(data)
@@ -58,7 +56,7 @@ def run_all(
     plot_supplemental_composition(data, paths)
     stages.update(1)
 
-    # Stage 3: run and publish the prespecified raw-scale DiD estimand.
+    # Keep the prespecified effect on the raw citation scale.
     primary_did = run_primary_did(data, n_boot=primary_bootstrap_repetitions)
     formatted_table_3 = format_table_3(primary_did)
     write_flat_table(
@@ -75,15 +73,14 @@ def run_all(
     plot_figure_2(data, primary_did, paths)
     stages.update(1)
 
-    # Stage 4: probe cutoff, control, scale, pretrend, and placebo assumptions.
+    # Vary timing, controls, and scale; diagnose pretrends and placebo effects separately.
     robustness_raw, robustness_log = run_robustness(data, n_boot=robustness_bootstrap_repetitions)
     plot_figure_3(robustness_raw, robustness_log, paths)
     pretrend_monthly, pretrend_info = plot_pretrend_difference(data, paths)
     placebo = run_placebo_did(data, n_boot=robustness_bootstrap_repetitions)
     stages.update(1)
 
-    # Stage 5: temporal folds choose models before evaluation on the later holdout,
-    # preserving the prospective ordering of citation prediction.
+    # Select models on past-only folds; the later holdout must not influence selection.
     metrics, fold_metrics, test_predictions, forecasts, final_models = fit_prediction_models(data)
     formatted_table_4 = format_table_4(metrics)
     write_flat_table(
@@ -101,15 +98,13 @@ def run_all(
     plot_figure_4(data, test_predictions, paths)
     stages.update(1)
 
-    # Stage 6: aggregate article-level forecasts only after model selection and
-    # refitting, while retaining the detailed cache for reproducibility.
+    # Aggregate only after selection and refitting; retain article-level forecasts.
     forecast_summary = aggregate_forecasts(forecasts)
     write_table_5(forecast_summary, paths.main_table_dir / "Table_5_post_cohort_forecasts.xlsx")
     forecast_monthly = plot_figure_5(forecasts, paths)
     stages.update(1)
 
-    # Stage 7: supplemental artifacts expose time slices, sensitivity estimates,
-    # model diagnostics, and source QA that support the main results.
+    # Keep diagnostics and sensitivity results separate from the main tables.
     write_flat_table(
         period_summaries["quarter_composition"],
         paths.supp_table_dir / "Supplemental_Table_1_quarterly_composition.xlsx",
@@ -170,8 +165,7 @@ def run_all(
         "Supplemental Table 9. Data quality checks before analysis",
         "ST9",
     )
-    # Missing Scopus matches remain composition records, but are isolated here
-    # because missing citation linkage must never be interpreted as zero.
+    # A missing Scopus match is unknown, not a zero-citation observation.
     publisher_only = data[data["db_paper_id"].isna()][
         [
             "journal_display",
@@ -200,8 +194,7 @@ def run_all(
     )
     stages.update(1)
 
-    # Stage 8: enforce analysis invariants before packaging combined and Word
-    # deliverables, so a failed run cannot silently produce submission tables.
+    # Stop before assembling submission tables if any analysis invariant fails.
     validation = validate_results(data, composition, citations, primary_did, metrics)
     write_flat_table(
         validation,
@@ -248,8 +241,7 @@ def run_all(
         paths,
     )
 
-    # The compact JSON summary is intended for automated run comparisons; full
-    # estimates remain in the tabular outputs returned below.
+    # Keep this summary small and stable for automated run comparisons.
     summary = {
         "analysis_cutoff": ANALYSIS_CUTOFF.strftime("%Y-%m-%d"),
         "records": int(len(data)),
@@ -272,7 +264,7 @@ def run_all(
     stages.update(1)
     stages.close()
 
-    # Snapshot the finalized substantive output tree for review and provenance.
+    # Build the manifest last so it covers every substantive output.
     manifest = build_manifest(paths)
     write_flat_table(
         manifest,

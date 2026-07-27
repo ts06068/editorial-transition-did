@@ -11,7 +11,7 @@ from ..config import CATEGORY_ORDER, COHORTS, JOURNAL_DISPLAY, JOURNAL_ORDER
 
 def _excel_formats(workbook) -> dict[str, object]:
     """Build the shared manuscript-style Excel formats."""
-    # Centralized formats prevent visual drift between standalone and combined workbooks.
+    # Share one format registry across standalone and combined workbooks.
     base = {"font_name": "Times New Roman", "font_size": 10}
     return {
         "title": workbook.add_format(
@@ -59,7 +59,7 @@ def _citation_cell(row: pd.Series, panel: str) -> str:
 
 def _write_hierarchical_header(worksheet, row: int, formats: dict[str, object]) -> int:
     """Write the shared two-row category header and return the next row."""
-    # NORA spans its aggregate plus the three mutually exclusive component categories.
+    # NORA spans the aggregate and its three disjoint components.
     worksheet.merge_range(row, 0, row + 1, 0, "Publication cohort", formats["header_top"])
     worksheet.merge_range(row, 1, row + 1, 1, "Overall", formats["header_top"])
     worksheet.merge_range(row, 2, row + 1, 2, "ORA", formats["header_top"])
@@ -80,7 +80,7 @@ def write_table_1(composition: pd.DataFrame, path: Path) -> None:
         formats = _excel_formats(workbook)
         worksheet.merge_range(0, 0, 0, 7, title, formats["title"])
         row = _write_hierarchical_header(worksheet, 2, formats)
-        # Fixed journal/cohort/category orders make successive workbook versions comparable.
+        # Lock row and column order for stable workbook diffs.
         for journal in JOURNAL_ORDER:
             worksheet.write(row, 0, JOURNAL_DISPLAY[journal], formats["group"])
             for col in range(1, 8):
@@ -144,7 +144,7 @@ def write_table_2(citations: pd.DataFrame, path: Path) -> None:
         formats = _excel_formats(workbook)
         worksheet.merge_range(0, 0, 0, 7, title, formats["title"])
         row = 2
-        # Stack summary definitions vertically so all panels retain one category hierarchy.
+        # Every panel reuses the same category hierarchy.
         for panel_title, panel_key in panels:
             worksheet.merge_range(row, 0, row, 7, panel_title, formats["group"])
             row = _write_hierarchical_header(worksheet, row + 1, formats)
@@ -216,7 +216,7 @@ def write_flat_table(
             worksheet.write(2, col, str(column), formats["header_top"])
         for row_idx, values in enumerate(data.itertuples(index=False, name=None), start=3):
             for col_idx, value in enumerate(values):
-                # Preserve numeric cells for downstream use while representing missingness explicitly.
+                # Keep numbers numeric; encode missing values explicitly.
                 if pd.isna(value):
                     worksheet.write(row_idx, col_idx, "NA", formats["cell"])
                 elif isinstance(value, int | np.integer):
@@ -238,7 +238,7 @@ def write_flat_table(
 def write_table_5(forecast_summary: pd.DataFrame, path: Path) -> None:
     """Write predicted cumulative citation counts after the landmark."""
     output = forecast_summary.copy()
-    # Assemble manuscript-ready compound cells without altering the tidy source columns.
+    # Build display columns on a copy; keep the tidy input intact.
     output["Predicted mean (SD)"] = output.apply(
         lambda row: f"{row['predicted_mean']:.2f} ({row['predicted_sd']:.2f})"
         if np.isfinite(row["predicted_mean"]) and np.isfinite(row["predicted_sd"])
@@ -305,12 +305,12 @@ def write_combined_workbook(tables: dict[str, pd.DataFrame], path: Path) -> None
         workbook = writer.book
         formats = _excel_formats(workbook)
         for sheet_name, frame in tables.items():
-            # Excel limits worksheet names to 31 characters; preserve insertion order across sheets.
+            # Excel rejects worksheet names longer than 31 characters.
             safe_name = sheet_name[:31]
             frame.to_excel(writer, sheet_name=safe_name, index=False, startrow=2)
             worksheet = writer.sheets[safe_name]
             last_col = max(len(frame.columns) - 1, 0)
-            # Rewrite pandas' header row with the same manuscript style used by standalone tables.
+            # Replace pandas' header formatting with the manuscript style.
             worksheet.merge_range(0, 0, 0, last_col, sheet_name, formats["title"])
             for col, column in enumerate(frame.columns):
                 worksheet.write(2, col, str(column), formats["header_top"])

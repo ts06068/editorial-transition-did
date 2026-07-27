@@ -2,30 +2,31 @@
 
 ## Study Objective
 
-Assess changes in observed 1-year citation impact after the 2024 JACC editorial transition relative to Circulation and European Heart Journal, overall and by article category, using difference-in-differences analyses. Private source data, credentials, and generated results are excluded.
+Estimate changes in observed 1-year citation impact after the 2024 JACC editorial transition with a difference-in-differences design. Circulation and European Heart Journal are the comparison journals; results are reported overall and by article category. Source data, credentials, and generated results are excluded.
 
 ## Folder structure
 
-- `src/editorial_transition_did/`: reusable analysis package and CLI.
-- `src/editorial_transition_did/reporting/`: tables, figures, and manuscript files.
-- `notebooks/analysis.ipynb`: thin interactive wrapper around the full pipeline.
-- `tests/test_smoke.py`: private-data-free smoke tests.
-- `.github/workflows/smoke-test.yml`: automated CI checks.
-- `pyproject.toml` and `.env.example`: dependencies and local configuration template.
+- `src/editorial_transition_did/`: analysis package and CLI.
+- `src/editorial_transition_did/reporting/`: table, figure, and document writers.
+- `notebooks/analysis.ipynb`: thin wrapper around the package pipeline.
+- `tests/test_smoke.py`: synthetic-data smoke tests.
+- `.github/workflows/smoke-test.yml`: CI workflow.
+- `pyproject.toml` and `.env.example`: dependency and configuration contracts.
 
 ## Code structure
 
-- `cli.py` selects sample or full mode; `pipeline.py` runs the analysis stages in order.
-- `config.py` defines the study periods and paths; `data.py` builds the analysis cohort.
-- `summaries.py`, `did.py`, and `prediction.py` produce descriptive, DiD, and forecasting results.
-- `validation.py` checks analysis invariants; `reporting/` writes the final outputs.
-- `sample.py` generates deterministic synthetic data for local and CI testing.
+- `cli.py` dispatches sample or full mode. `pipeline.py` owns execution order.
+- `config.py` defines dates, windows, and paths. `data.py` builds the analysis frame.
+- `summaries.py` creates descriptive tables. `did.py` runs primary and sensitivity analyses.
+- `prediction.py` handles temporal validation and forecasting.
+- `validation.py` enforces hard checks. `reporting/` writes outputs.
+- `sample.py` supplies deterministic synthetic data for local and CI runs.
 
 ## Environment
 
-- Python 3.12
-- Exact package versions are defined in `pyproject.toml`.
-- Sample mode requires no private data or database connection; full mode reads local settings from `.env`.
+- Python 3.12.
+- Package versions are pinned in `pyproject.toml`.
+- Sample mode needs no private data or database. Full mode reads `.env`.
 
 ## How to run
 
@@ -35,7 +36,7 @@ editorial-transition-did sample
 python -m pytest
 ```
 
-For the full analysis, copy `.env.example` to `.env`, add the local workbook, HTML, and MSSQL settings, then run:
+Full mode needs the local workbook, publisher HTML, and read-only MSSQL settings in `.env`:
 
 ```powershell
 editorial-transition-did full

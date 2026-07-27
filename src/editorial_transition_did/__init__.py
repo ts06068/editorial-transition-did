@@ -32,12 +32,12 @@ def run_all(
 
     resolved_paths = paths or AnalysisPaths.from_environment()
     resolved_paths.create_directories()
-    # Configure the plotting cache and worker limit before importing modules that use them.
+    # Set process-wide settings before matplotlib and loky initialize.
     matplotlib_cache = resolved_paths.project_root / ".matplotlib"
     os.environ.setdefault("MPLCONFIGDIR", str(matplotlib_cache))
     os.environ.setdefault("LOKY_MAX_CPU_COUNT", "4")
 
-    # Keep package import lightweight; the full scientific stack is needed only here.
+    # Importing the package must not pull in the full plotting and model stack.
     from .pipeline import run_all as _run_all
 
     return _run_all(

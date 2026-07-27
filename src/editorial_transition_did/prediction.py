@@ -23,12 +23,11 @@ from .utils import category_mask
 
 def _prediction_features(frame: pd.DataFrame) -> pd.DataFrame:
     output = frame.copy()
-    # The 12-month citation count is known at prediction time; log1p tempers its
-    # heavy right tail while retaining uncited articles.
+    # C12 is known at prediction time; log1p keeps zeros and limits tail leverage.
     output["landmark_log"] = np.log1p(output["c12_obs"].astype(float))
     output["publication_year_centered"] = output["publication_date"].dt.year - 2016
     month = output["publication_date"].dt.month.astype(float)
-    # Paired sine/cosine features encode December-January as adjacent seasons.
+    # Sine/cosine encoding keeps December adjacent to January.
     output["month_sin"] = np.sin(2 * np.pi * month / 12.0)
     output["month_cos"] = np.cos(2 * np.pi * month / 12.0)
     return output
@@ -48,7 +47,7 @@ def make_prediction_model(seed: int = 20260724) -> Pipeline:
         ],
         sparse_threshold=0,
     )
-    # Poisson loss respects the nonnegative, right-skewed citation-increment target.
+    # Poisson loss matches a nonnegative, right-skewed increment target.
     estimator = HistGradientBoostingRegressor(
         loss="poisson",
         learning_rate=0.05,
@@ -67,7 +66,7 @@ def _baseline_multiplier_predict(
     outcome: str,
 ) -> np.ndarray:
     train = train.copy()
-    # Adding one stabilizes ratios for articles with zero citations at 12 months.
+    # Add one to both counts so zero-C12 articles have a finite ratio.
     ratio = (train[outcome].astype(float) + 1.0) / (train["c12_obs"].astype(float) + 1.0)
     train["ratio"] = ratio
     group_ratio = train.groupby(["journal_code", "category"], observed=True)["ratio"].median()
@@ -75,8 +74,7 @@ def _baseline_multiplier_predict(
     global_ratio = float(train["ratio"].median())
     predictions = []
     for row in test[["journal_code", "category", "c12_obs"]].itertuples(index=False):
-        # Back off from journal-category to journal and then global medians when a
-        # sparse subgroup was absent from the historical training window.
+        # Sparse-group fallback order is journal-category, journal, then global.
         multiplier = group_ratio.get((row.journal_code, row.category), np.nan)
         if not np.isfinite(multiplier):
             multiplier = journal_ratio.get(row.journal_code, global_ratio)
@@ -85,7 +83,7 @@ def _baseline_multiplier_predict(
 
 
 def _calibration_parameters(observed: np.ndarray, predicted: np.ndarray) -> tuple[float, float]:
-    # Calibration is undefined for a constant prediction vector or a tiny sample.
+    # Require at least three rows and prediction variance before fitting calibration.
     if len(observed) < 3 or np.nanstd(predicted) == 0:
         return np.nan, np.nan
     calibration = LinearRegression().fit(predicted.reshape(-1, 1), observed)
@@ -137,8 +135,7 @@ def _residual_intervals(
             "low95": np.full_like(predicted, np.nan),
             "high95": np.full_like(predicted, np.nan),
         }
-    # Empirical out-of-fold residual quantiles preserve asymmetric forecast error;
-    # lower limits are truncated because negative citation increments are impossible.
+    # OOF residual quantiles retain asymmetric error; increments are bounded at zero.
     q025, q10, q90, q975 = np.quantile(residuals, [0.025, 0.10, 0.90, 0.975])
     return {
         "low80": np.maximum(0.0, predicted + q10),
@@ -149,8 +146,7 @@ def _residual_intervals(
 
 
 def _eligible_prediction_data(data: pd.DataFrame, outcome: str) -> pd.DataFrame:
-    # Stop before June 2024 so model development cannot learn from the editorial
-    # transition cohort; require atomic categories and complete landmark outcomes.
+    # Keep atomic rows published by May 2024 with both C12 and the target observed.
     frame = data[
         data["publication_date"].le(pd.Timestamp("2024-05-31"))
         & data["c12_obs"].notna()
@@ -173,7 +169,7 @@ def fit_prediction_models(
     development_end = pd.Timestamp("2022-05-31")
     test_start = pd.Timestamp("2022-06-01")
     test_end = pd.Timestamp("2024-05-31")
-    # Five expanding-window folds reproduce prospective annual model updates.
+    # Expanding folds emulate prospective annual refits.
     validation_starts = [pd.Timestamp(year, 6, 1) for year in range(2017, 2022)]
 
     for horizon_index, (horizon, definition) in enumerate(
@@ -195,7 +191,7 @@ def fit_prediction_models(
                     validation_start, validation_end, inclusive="both"
                 )
             ]
-            # Skip early folds that cannot support stable subgroup encoding or metrics.
+            # Skip undersized folds; their validation metrics are unstable.
             if len(train_fold) < 1000 or len(valid_fold) < 100:
                 continue
             model = make_prediction_model(seed=20260724 + horizon_index * 10 + fold_index)
@@ -236,15 +232,13 @@ def fit_prediction_models(
                 f"No rolling temporal validation folds were available for {horizon}."
             )
         oof = pd.concat(oof_parts, ignore_index=True)
-        # Choose between the nonlinear model and transparent multiplier baseline by
-        # mean rolling-fold MAE, before inspecting the held-out temporal test set.
+        # Select by mean rolling MAE before touching the temporal test set.
         selection = pd.DataFrame(selection_scores).groupby("model", observed=True)["mae"].mean()
         selected_model_name = str(selection.idxmin())
         model_residuals = oof["residual"].to_numpy(dtype=float)
         baseline_residuals = oof["baseline_residual"].to_numpy(dtype=float)
 
-        # The 2022-2024 test period remains untouched while this model is fitted on
-        # the pre-June-2022 development data.
+        # Fit on pre-June-2022 data; keep 2022-2024 untouched for testing.
         development_model = make_prediction_model(seed=20260724 + horizon_index)
         development_model.fit(development[PREDICTOR_COLUMNS], development[outcome])
         test_prediction = np.maximum(0.0, development_model.predict(test[PREDICTOR_COLUMNS]))
@@ -309,8 +303,7 @@ def fit_prediction_models(
             test_part[f"increment_{key}"] = values
         test_rows.append(test_part)
 
-        # After temporal evaluation and model selection, refit on every eligible
-        # pre-transition outcome to maximize information available for forecasting.
+        # After selection, refit on every eligible pre-transition outcome.
         final_train = eligible.copy()
         final_model = make_prediction_model(seed=20260824 + horizon_index)
         final_model.fit(final_train[PREDICTOR_COLUMNS], final_train[outcome])
@@ -319,8 +312,7 @@ def fit_prediction_models(
             "poisson_gradient_boosting": final_model,
         }
 
-        # Forecast recent cohorts for which the 12-month landmark is known; later
-        # cumulative outcomes may remain missing and are retained for projection.
+        # Forecast only records with observed C12; later landmarks may remain missing.
         candidates = data[
             data["publication_date"].between(pd.Timestamp("2022-06-01"), pd.Timestamp("2025-06-30"))
             & data["c12_obs"].notna()
@@ -354,7 +346,7 @@ def fit_prediction_models(
         forecast["predicted_increment"] = predicted_increment
         forecast["gradient_boosting_increment"] = gradient_prediction
         forecast["baseline_increment"] = baseline_prediction
-        # Convert post-landmark increment predictions back to cumulative citations.
+        # Cumulative forecasts equal observed C12 plus the predicted increment.
         forecast["predicted_cumulative"] = forecast["c12_obs"] + predicted_increment
         for key, values in forecast_intervals.items():
             forecast[f"cumulative_{key}"] = forecast["c12_obs"].to_numpy(dtype=float) + values
@@ -405,8 +397,7 @@ def format_table_4(metrics: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_forecasts(forecasts: pd.DataFrame) -> pd.DataFrame:
-    # This June-May cohort straddles the editorial transition and is the prespecified
-    # group summarized in the forward citation projection table.
+    # The projection table is restricted to the prespecified 2024.6-2025.5 cohort.
     post = forecasts[
         forecasts["publication_date"].between(
             pd.Timestamp("2024-06-01"), pd.Timestamp("2025-05-31")

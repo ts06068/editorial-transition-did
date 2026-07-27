@@ -102,16 +102,14 @@ class AnalysisPaths:
             path.mkdir(parents=True, exist_ok=True)
 
 
-# Citation counts are administratively censored on this date; follow-up is marked
-# complete only when the entire requested horizon has elapsed by that date.
+# A follow-up horizon is complete only if it ends by this administrative cutoff.
 ANALYSIS_CUTOFF = pd.Timestamp("2026-07-24")
 PUBLICATION_START = pd.Timestamp("2008-01-01")
 PUBLICATION_END = pd.Timestamp("2026-06-30")
 RECENT_START = pd.Timestamp("2022-06-01")
 PRIMARY_INTERVENTION = pd.Timestamp("2024-07-01")
 
-# JACC is the treated journal in the DiD; CIRC and EHJ form the equal-weighted
-# comparison group. Display names and colors live here to stay consistent in reports.
+# DiD mapping: JACC is treated; CIRC and EHJ are equal-weight controls.
 JOURNALS = {
     "circ": {
         "display": "CIRC",
@@ -142,7 +140,7 @@ CATEGORY_ORDER = [
     "GSS",
     "Non-citable items",
 ]
-# NORA is a reporting composite rather than a mutually exclusive source category.
+# NORA is a reporting composite, not a mutually exclusive source category.
 ATOMIC_CATEGORIES = [
     "ORA",
     "Meta-analysis",
@@ -152,8 +150,7 @@ ATOMIC_CATEGORIES = [
 ]
 NORA_CATEGORIES = {"Meta-analysis", "Review", "GSS"}
 
-# June-May cohorts align publication years around the editorial transition. The
-# final cohort runs through June 2026 and is flagged incomplete for 12-month follow-up.
+# Cohorts run June-May; the final, extended cohort lacks complete 12-month follow-up.
 COHORTS = [
     ("2022.6-2023.5", pd.Timestamp("2022-06-01"), pd.Timestamp("2023-05-31"), True),
     ("2023.6-2024.5", pd.Timestamp("2023-06-01"), pd.Timestamp("2024-05-31"), True),
@@ -166,8 +163,7 @@ COHORTS = [
     ),
 ]
 
-# Each prediction target is the citation increment after the observed 12-month
-# landmark; ``months`` names the resulting cumulative citation horizon.
+# Targets are post-C12 increments; months identifies the cumulative horizon.
 HORIZONS = {
     "3 months": {"months": 15, "increment": "increment_3m", "observed": "c15_obs"},
     "6 months": {"months": 18, "increment": "increment_6m", "observed": "c18_obs"},
@@ -224,7 +220,7 @@ PRIMARY_WINDOW = DidWindow(
     post_end=pd.Timestamp("2025-06-30"),
 )
 
-# The placebo window repeats the primary design one year before the real transition.
+# Keep the primary window length, but shift the placebo cutoff back one year.
 PLACEBO_WINDOW = DidWindow(
     label="Placebo: July 2023 cutoff, 12-month windows",
     cutoff=pd.Timestamp("2023-07-01"),
@@ -238,8 +234,7 @@ PLACEBO_WINDOW = DidWindow(
 def make_sensitivity_windows() -> list[DidWindow]:
     """Return the alternative intervention-window definitions."""
 
-    # Adjacent cutoffs test timing ambiguity; the washout specification removes the
-    # June-August handover period instead of assigning it to either DiD period.
+    # Adjacent cutoffs test timing ambiguity. Washout excludes the handover months.
     return [
         DidWindow(
             label="Sensitivity: June 2024 cutoff, 12-month windows",

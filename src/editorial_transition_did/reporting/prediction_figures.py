@@ -21,13 +21,13 @@ from .plotting import configure_plot_style, format_period_axis, save_figure
 
 def plot_figure_4(data: pd.DataFrame, test_predictions: pd.DataFrame, paths: AnalysisPaths) -> None:
     configure_plot_style()
-    # The upper row uses the untouched temporal test era, matching the validation analysis.
+    # Keep the temporal test era untouched for validation plots.
     scatter = data[
         data["publication_date"].between(pd.Timestamp("2022-06-01"), pd.Timestamp("2024-05-31"))
         & data["c12_obs"].notna()
         & data["increment_12m"].notna()
     ].copy()
-    # Columns align journals above the three forecast horizons for a compact validation grid.
+    # Align journal panels above forecast-horizon panels.
     fig, axes = plt.subplots(2, 3, figsize=(9, 6))
     for index, (axis, journal) in enumerate(zip(axes[0], JOURNAL_ORDER, strict=False)):
         panel = scatter[scatter["journal_code"].eq(journal)]
@@ -58,7 +58,7 @@ def plot_figure_4(data: pd.DataFrame, test_predictions: pd.DataFrame, paths: Ana
     model_tests = test_predictions[test_predictions["horizon"].isin(HORIZONS)].copy()
     for offset, (axis, horizon) in enumerate(zip(axes[1], HORIZONS, strict=False), start=3):
         panel = model_tests[model_tests["horizon"].eq(horizon)].copy()
-        # Collapse tied predictions safely; sparse horizons may support fewer than ten bins.
+        # Ties can reduce the number of valid quantile bins below ten.
         quantile_count = min(10, panel["predicted_increment"].nunique())
         panel["prediction_group"] = pd.qcut(
             panel["predicted_increment"], q=quantile_count, duplicates="drop"
@@ -72,7 +72,7 @@ def plot_figure_4(data: pd.DataFrame, test_predictions: pd.DataFrame, paths: Ana
             )
             .reset_index(drop=True)
         )
-        # Shared square limits make deviation from the 1:1 calibration line visually meaningful.
+        # Shared square limits preserve distance from the calibration diagonal.
         maximum = max(calibration["predicted"].max(), calibration["observed"].max()) * 1.05
         axis.plot([0, maximum], [0, maximum], color="0.55", linestyle="--", linewidth=1)
         axis.errorbar(
@@ -98,7 +98,7 @@ def plot_figure_4(data: pd.DataFrame, test_predictions: pd.DataFrame, paths: Ana
 
 def plot_figure_5(forecasts: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
     configure_plot_style()
-    # Aggregate once into the period-level dataset returned for audit and used for plotting.
+    # Return the same period-level frame used by the plot.
     period_rows: list[dict[str, object]] = []
     for frequency in FREQUENCY_ORDER:
         periodized = add_period_columns(forecasts, frequency)
@@ -115,7 +115,7 @@ def plot_figure_5(forecasts: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame
         ):
             horizon, journal, _, period_label, period_date, period_end = keys
             observed_values = group["observed_cumulative"].dropna()
-            # A period is observed only when every article has reached the target horizon.
+            # Mark a period observed only when every article reaches the horizon.
             fully_observed = len(observed_values) == len(group)
             period_rows.append(
                 {
@@ -135,7 +135,7 @@ def plot_figure_5(forecasts: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame
             )
     period_summary = pd.DataFrame(period_rows)
 
-    # Rows retain reporting frequency; columns progress from C15 through C24 horizons.
+    # Keep frequency on rows and forecast horizon on columns.
     fig, axes = plt.subplots(3, 3, figsize=(10.5, 8.2), sharey=False)
     panel_index = 0
     for row_index, frequency in enumerate(FREQUENCY_ORDER):
@@ -158,7 +158,7 @@ def plot_figure_5(forecasts: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame
                     label=JOURNAL_DISPLAY[journal],
                 )
                 if not forecast.empty:
-                    # Anchor the dashed forecast to the last observed mean for visual continuity.
+                    # Join the forecast at the last observed mean; do not imply a gap.
                     bridge = journal_data[
                         journal_data["period_date"].isin(
                             [observed["period_date"].max() if not observed.empty else pd.NaT]
@@ -178,7 +178,7 @@ def plot_figure_5(forecasts: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame
                         markersize=2.5,
                         linewidth=1.4,
                     )
-                    # Show uncertainty only where values are model-based rather than observed.
+                    # Draw uncertainty only for model-based values.
                     axis.fill_between(
                         forecast["period_date"],
                         forecast["forecast_low80"],

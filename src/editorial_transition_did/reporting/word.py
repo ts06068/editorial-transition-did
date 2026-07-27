@@ -22,8 +22,7 @@ from ..config import AnalysisPaths
 
 
 def _configure_word_document(document: Document) -> None:
-    # A landscape page with one-inch margins leaves a nine-inch table canvas;
-    # later width normalization relies on that invariant.
+    # Landscape letter paper with one-inch margins leaves nine inches for tables.
     section = document.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
     section.page_width = Inches(11)
@@ -46,8 +45,7 @@ def _set_word_cell_margins(
     vertical_twips: int = 15,
     horizontal_twips: int = 35,
 ) -> None:
-    # python-docx has no public cell-margin API, so edit the OOXML properties in
-    # twips (1/1440 inch) while preserving any existing margin element.
+    # python-docx lacks a cell-margin API; OOXML stores these values in twips.
     properties = cell._tc.get_or_add_tcPr()
     margins = properties.first_child_found_in("w:tcMar")
     if margins is None:
@@ -77,7 +75,7 @@ def _word_border_element(cell, edge: str):
 
 
 def _clear_word_cell_borders(cell) -> None:
-    # Start from a borderless cell and add only journal-style horizontal rules.
+    # Remove default borders before adding the required horizontal rules.
     for edge in ("top", "start", "bottom", "end", "insideH", "insideV"):
         element = _word_border_element(cell, edge)
         element.set(qn("w:val"), "nil")
@@ -113,14 +111,14 @@ def _manuscript_word_text(value: object) -> str:
 
 @dataclass(frozen=True)
 class ManuscriptWordRow:
-    # `kind="group"` marks journal/horizon separators for bolding and top rules.
+    # Group rows carry section boundaries, not data.
     values: tuple[object, ...]
     kind: str = "data"
 
 
 @dataclass
 class ManuscriptWordBlock:
-    # A block is one independently headed panel within a manuscript table.
+    # Each block is an independently headed table panel.
     headers: list[list[str]]
     rows: list[ManuscriptWordRow]
     panel_title: str | None = None
@@ -133,7 +131,7 @@ class ManuscriptWordBlock:
 
 @dataclass
 class ManuscriptWordTable:
-    # Specs keep assembled table content separate from lower-level OOXML rendering.
+    # Specs separate table content from OOXML rendering.
     output_path: Path
     title: str
     blocks: list[ManuscriptWordBlock]
@@ -149,8 +147,7 @@ def _set_word_table_layout(table, widths: Sequence[float]) -> None:
         layout = OxmlElement("w:tblLayout")
         properties.append(layout)
     layout.set(qn("w:type"), "fixed")
-    # Set widths at both column and cell level because Word may ignore either
-    # representation depending on the document viewer.
+    # Set both width representations; Word viewers disagree about which one wins.
     for column, width in zip(table.columns, widths, strict=False):
         column.width = Inches(width)
     for row in table.rows:
@@ -196,7 +193,7 @@ def _append_manuscript_title(document: Document, title: str) -> None:
     paragraph = document.add_paragraph()
     paragraph.paragraph_format.space_after = Pt(4)
     paragraph.paragraph_format.keep_with_next = True
-    # Bold only the table identifier, matching common journal submission style.
+    # Bold the table identifier, not the title.
     match = re.match(r"^((?:Supplemental )?Table [^.]+\.)\s*(.*)$", title)
     parts = (match.group(1), match.group(2)) if match else (title, "")
     for index, text_value in enumerate(parts):
@@ -232,14 +229,13 @@ def _append_manuscript_block(document: Document, block: ManuscriptWordBlock) -> 
     if block.panel_title:
         _append_panel_title(document, block.panel_title)
     column_count = max(len(row) for row in block.headers)
-    # Fail before writing a malformed document if a producer supplied a row
-    # that does not match the declared header geometry.
+    # Reject rows that do not match the declared table geometry.
     if any(len(row.values) != column_count for row in block.rows):
         raise ValueError(f"Word table block has inconsistent row width: {block.panel_title}")
     header_count = len(block.headers)
     table = document.add_table(rows=header_count + len(block.rows), cols=column_count)
     widths = block.column_widths or [9.0 / column_count] * column_count
-    # Preserve relative widths while fitting every table to the printable area.
+    # Preserve column proportions while fitting the printable width.
     if not math.isclose(sum(widths), 9.0, abs_tol=0.05):
         scale = 9.0 / sum(widths)
         widths = [width * scale for width in widths]
@@ -247,8 +243,7 @@ def _append_manuscript_block(document: Document, block: ManuscriptWordBlock) -> 
     alignments = block.alignments or ["center"] * column_count
 
     for row_index, header_values in enumerate(block.headers):
-        # Prevent each header row from splitting across pages; blank padding supports
-        # multi-row headers whose upper tier has fewer labels.
+        # Pad short header tiers and keep each tier on one page.
         padded = [*header_values, *([""] * (column_count - len(header_values)))]
         row = table.rows[row_index]
         row_properties = row._tr.get_or_add_trPr()
@@ -265,8 +260,7 @@ def _append_manuscript_block(document: Document, block: ManuscriptWordBlock) -> 
             )
 
     for start_row, start_column, end_row, end_column in block.header_merges:
-        # Reapply the anchor label because Word's merge operation can retain
-        # text from multiple source cells.
+        # Word may retain text from merged cells; restore the anchor label.
         merged_cell = table.cell(start_row, start_column).merge(table.cell(end_row, end_column))
         _set_manuscript_cell_text(
             merged_cell,
@@ -294,7 +288,7 @@ def _append_manuscript_block(document: Document, block: ManuscriptWordBlock) -> 
                 keep_with_next=is_group,
             )
 
-    # Draw only the sparse horizontal rules used by the manuscript table style.
+    # Manuscript tables use sparse horizontal rules only.
     for column_index in range(column_count):
         _update_word_cell_borders(table.cell(0, column_index), top=True)
         _update_word_cell_borders(table.cell(header_count - 1, column_index), bottom=True)
@@ -355,7 +349,7 @@ def _write_manuscript_bundle(
     document = Document()
     _configure_word_document(document)
     _append_table_legends(document, specs)
-    # Bundles begin with legends, then isolate each complete table on a new page.
+    # Put legends first and start every complete table on a new page.
     for spec in specs:
         document.add_page_break()
         _append_manuscript_table(document, spec)
@@ -369,8 +363,7 @@ def write_manuscript_word_tables(
 ) -> list[Path]:
     outputs: list[Path] = []
     all_specs = [*main_specs, *supplemental_specs]
-    # Save standalone files for submission editing as well as bundled documents
-    # for convenient review by the full author team.
+    # Write standalone tables for editing and bundles for review.
     for spec in tqdm(all_specs, desc="Writing manuscript-style Word tables", leave=False):
         document = Document()
         _configure_word_document(document)
