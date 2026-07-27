@@ -2,5 +2,5 @@
 
 from .cli import main
 
-# Propagate the CLI return code when the package is invoked with ``python -m``.
+# Do not hide CLI failures from the calling shell.
 raise SystemExit(main())

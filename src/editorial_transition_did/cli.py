@@ -85,7 +85,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _resolve_path(value: Path, project_root: Path) -> Path:
-    # Resolve relative CLI and .env paths against the invocation directory.
+    # Relative paths belong to the invocation directory, not the package.
     expanded = value.expanduser()
     if expanded.is_absolute():
         return expanded.resolve()
@@ -93,7 +93,7 @@ def _resolve_path(value: Path, project_root: Path) -> Path:
 
 
 def _selected_mode(parser: argparse.ArgumentParser, args: argparse.Namespace) -> str:
-    # Support both subcommands and the legacy --mode spelling without ambiguity.
+    # Reject conflicting spellings instead of guessing which one wins.
     if args.command and args.mode and args.command != args.mode:
         parser.error("the subcommand and --mode must select the same analysis")
     mode = args.command or args.mode
@@ -110,10 +110,10 @@ def _run_full(args: argparse.Namespace) -> None:
 
     project_root = Path.cwd().resolve()
     env_file = _resolve_path(args.env_file, project_root)
-    # Load .env first so AnalysisPaths can apply environment-backed defaults.
+    # Path defaults depend on .env, so load it first.
     load_dotenv(env_file)
     defaults = AnalysisPaths.from_environment(project_root)
-    # Explicit command-line paths take precedence over every .env default.
+    # Explicit CLI paths override .env.
     paths = AnalysisPaths(
         project_root=project_root,
         input_xlsx=(_resolve_path(args.input, project_root) if args.input else defaults.input_xlsx),
@@ -129,7 +129,7 @@ def _run_full(args: argparse.Namespace) -> None:
     os.environ.setdefault("MPLCONFIGDIR", str(paths.project_root / ".matplotlib"))
     os.environ.setdefault("LOKY_MAX_CPU_COUNT", "4")
 
-    # Delay heavy plotting/model imports until full mode is actually requested.
+    # Sample mode must not import the plotting and model stack.
     from .pipeline import run_all
 
     run_all(
@@ -142,7 +142,7 @@ def _run_full(args: argparse.Namespace) -> None:
 
 
 def _run_sample(args: argparse.Namespace) -> None:
-    # Sample mode deliberately bypasses private workbooks, HTML, and MSSQL.
+    # Keep this path independent of private files and MSSQL.
     output_dir = args.output_dir or Path("outputs") / "sample"
     results = run_sample(
         output_dir=output_dir,

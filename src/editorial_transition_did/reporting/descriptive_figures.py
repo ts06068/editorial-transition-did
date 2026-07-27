@@ -21,14 +21,14 @@ from .plotting import configure_plot_style, format_period_axis, save_figure
 
 def plot_figure_1(data: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
     configure_plot_style()
-    # Restrict every panel to the prespecified reporting era before assigning periods.
+    # Restrict source publications to the reporting window before periodizing.
     recent = data[data["publication_date"].between(RECENT_START, PUBLICATION_END)].copy()
-    # Column order is a manuscript contract: broad groups first, then the non-citable group.
+    # Panel order is fixed by the manuscript labels.
     panel_categories = ["Overall", "ORA", "NORA", "Non-citable items"]
     rows: list[pd.DataFrame] = []
     for frequency in FREQUENCY_ORDER:
         periodized = add_period_columns(recent, frequency)
-        # Exclude partially observed periods so low follow-up cannot appear as low citation impact.
+        # Drop incomplete horizons; missing follow-up is not low citation impact.
         periodized = periodized[
             complete_period_mask(periodized, 12) & periodized["c12_obs"].notna()
         ].copy()
@@ -52,7 +52,7 @@ def plot_figure_1(data: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
             rows.append(grouped)
     summary = pd.concat(rows, ignore_index=True)
 
-    # Rows encode time resolution and columns encode article category throughout Figure 1.
+    # Keep frequency on rows and article category on columns.
     fig, axes = plt.subplots(3, 4, figsize=(12, 8.2), sharex=False)
     panel_index = 0
     for row_index, frequency in enumerate(FREQUENCY_ORDER):
@@ -72,7 +72,7 @@ def plot_figure_1(data: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
                     markersize=3,
                     label=JOURNAL_DISPLAY[journal],
                 )
-            # The transition band and intervention line are kept identical across all panels.
+            # Use the same transition interval and intervention date in every panel.
             axis.axvspan(
                 pd.Timestamp("2024-06-01"),
                 pd.Timestamp("2024-08-31"),
@@ -104,7 +104,7 @@ def plot_figure_1(data: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
 def plot_supplemental_composition(data: pd.DataFrame, paths: AnalysisPaths) -> pd.DataFrame:
     configure_plot_style()
     recent = data[data["publication_date"].between(RECENT_START, PUBLICATION_END)].copy()
-    # Build one tidy summary first so the exported data and plotted values share a source.
+    # Plot and export the same grouped frame.
     grouped_parts: list[pd.DataFrame] = []
     for frequency in FREQUENCY_ORDER:
         periodized = add_period_columns(recent, frequency)
@@ -118,7 +118,7 @@ def plot_supplemental_composition(data: pd.DataFrame, paths: AnalysisPaths) -> p
             .reset_index()
         )
     grouped = pd.concat(grouped_parts, ignore_index=True)
-    # This figure transposes the main layout: resolution by row and journal by column.
+    # Keep frequency on rows and journal on columns.
     fig, axes = plt.subplots(3, 3, figsize=(11, 8), sharey=False)
     category_colors = {
         "ORA": "#2F5597",
@@ -134,7 +134,7 @@ def plot_supplemental_composition(data: pd.DataFrame, paths: AnalysisPaths) -> p
             panel = grouped[
                 grouped["frequency"].eq(frequency) & grouped["journal_code"].eq(journal)
             ]
-            # Reindexing preserves the same stack and color order even when a category is absent.
+            # Reindex missing categories to keep stack colors stable.
             pivot = (
                 panel.pivot_table(
                     index=["period_date", "period_label"],

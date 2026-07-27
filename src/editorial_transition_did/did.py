@@ -23,8 +23,7 @@ from .utils import category_mask, format_p_value
 def select_did_window(data: pd.DataFrame, window: DidWindow) -> pd.DataFrame:
     """Select complete 1-year outcomes in a pre/post DiD window."""
 
-    # Require a fully observed 12-month outcome before assigning exposure periods;
-    # this holds follow-up availability constant across pre and post cohorts.
+    # Require complete C12 follow-up before exposure assignment.
     selected = data[
         data["publication_date"].between(window.pre_start, window.post_end, inclusive="both")
         & data["c12_obs"].notna()
@@ -41,7 +40,7 @@ def select_did_window(data: pd.DataFrame, window: DidWindow) -> pd.DataFrame:
         ["Pre", "Post"],
         default="Outside",
     )
-    # Sensitivity windows can intentionally leave transition months unassigned.
+    # Sensitivity windows may leave handover months deliberately unassigned.
     return selected[selected["period"].isin(["Pre", "Post"])].copy()
 
 
@@ -51,14 +50,13 @@ def _bootstrap_raw_did(
     n_boot: int,
     seed: int,
 ) -> np.ndarray:
-    # Aggregate to journal-month blocks before resampling. Article-level resampling
-    # would understate uncertainty when citations share calendar-time shocks.
+    # Aggregate first so all journals in a sampled publication month move together.
     monthly = (
         selected.groupby(["journal_code", "period", "publication_month"], observed=True)["c12_obs"]
         .agg(total="sum", n="size")
         .reset_index()
     )
-    # Column zero is always the treated journal; remaining columns are controls.
+    # Matrix contract: column zero is treated; all remaining columns are controls.
     journals = ["jacc", *controls]
     arrays: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for period in ["Pre", "Post"]:
@@ -79,8 +77,7 @@ def _bootstrap_raw_did(
             return np.full(n_boot, np.nan)
         arrays[period] = (totals, counts)
 
-    # Resample each calendar month jointly across journals so that common citation
-    # shocks and cross-journal covariance are retained within the bootstrap draw.
+    # Draw months jointly across journals to retain common shocks and covariance.
     rng = np.random.default_rng(seed)
     means: dict[str, np.ndarray] = {}
     for period, (totals, counts) in arrays.items():
@@ -94,7 +91,7 @@ def _bootstrap_raw_did(
             where=sampled_counts > 0,
         )
     changes = means["Post"] - means["Pre"]
-    # Controls receive equal journal weight, irrespective of their article counts.
+    # Weight control journals equally; article volume must not set the estimand.
     return changes[:, 0] - changes[:, 1:].mean(axis=1)
 
 
@@ -128,15 +125,14 @@ def calculate_raw_did(
         journal: cell(journal, "Post", "mean") - cell(journal, "Pre", "mean")
         for journal in ["jacc", *controls]
     }
-    # The estimand is JACC's pre/post change minus the simple mean change in CIRC
-    # and EHJ (or the single selected control in a robustness specification).
+    # Estimand: JACC change minus the unweighted mean control change.
     control_change = float(np.mean([changes[journal] for journal in controls]))
     estimate = changes["jacc"] - control_change
     draws = _bootstrap_raw_did(selected, controls, n_boot=n_boot, seed=seed)
     finite_draws = draws[np.isfinite(draws)]
     if finite_draws.size:
         ci_low, ci_high = np.quantile(finite_draws, [0.025, 0.975])
-        # A two-sided empirical bootstrap p value counts draws on either side of zero.
+        # The two-sided empirical p value uses the smaller bootstrap tail twice.
         p_value = min(
             1.0,
             2
@@ -179,7 +175,7 @@ def run_primary_did(data: pd.DataFrame, n_boot: int = 2000) -> pd.DataFrame:
 
     rows = []
     for index, category in enumerate(tqdm(CATEGORY_ORDER, desc="Primary raw DiD")):
-        # Offset seeds make category results reproducible without reusing bootstrap draws.
+        # Offset seeds keep strata reproducible without recycling bootstrap draws.
         rows.append(
             calculate_raw_did(
                 data,
@@ -242,12 +238,10 @@ def calculate_log_did(
     selected = selected[category_mask(selected, category)].copy()
     selected = selected[selected["journal_code"].isin(["jacc", *controls])]
     selected["post"] = selected["period"].eq("Post").astype(int)
-    # log1p retains zero-citation papers while reducing the influence of the long
-    # right tail typical of citation counts.
+    # log1p keeps zero-citation papers and limits leverage from the citation tail.
     selected["log_c12"] = np.log1p(selected["c12_obs"])
     selected["month_cluster"] = selected["publication_month"].astype(str)
-    # Month fixed effects absorb common citation-time shocks; the JACC-by-post
-    # interaction is the treated journal's differential post-transition change.
+    # Month effects absorb common shocks; JACC-by-post is the differential change.
     model = smf.ols(
         "log_c12 ~ C(journal_code) + C(month_cluster) + is_jacc:post",
         data=selected,
@@ -289,8 +283,7 @@ def run_robustness(
         ("June-August washout", sensitivity_windows[2]),
     ]
     raw_specs: list[tuple[str, DidWindow, str, Sequence[str]]] = []
-    # Cross timing definitions with the main article-type strata, then repeat the
-    # primary cutoff against each control journal separately.
+    # Cross timing windows with strata, then isolate each control at the primary cutoff.
     for category in ["Overall", "ORA", "Review"]:
         raw_specs.extend(
             [
@@ -340,8 +333,7 @@ def run_robustness(
 def run_placebo_did(data: pd.DataFrame, n_boot: int = 1500) -> pd.DataFrame:
     """Run the original July 2023 pre-intervention placebo specifications."""
 
-    # A signal here would suggest the estimated JACC divergence predates the
-    # editorial transition and weakens the parallel-trends interpretation.
+    # A placebo signal means divergence predates treatment and weakens parallel trends.
     return pd.DataFrame(
         [
             calculate_raw_did(
