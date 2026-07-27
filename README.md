@@ -15,11 +15,12 @@ Assess changes in observed 1-year citation impact after the 2024 JACC editorial 
 
 ## Code structure
 
-- `cli.py` selects sample or full mode; `pipeline.py` runs the analysis stages in order.
-- `config.py` defines the study periods and paths; `data.py` builds the analysis cohort.
-- `summaries.py`, `did.py`, and `prediction.py` produce descriptive, DiD, and forecasting results.
-- `validation.py` checks analysis invariants; `reporting/` writes the final outputs.
-- `sample.py` generates deterministic synthetic data for local and CI testing.
+- `cli.py` selects sample or full mode
+- `pipeline.py` runs the analysis stages in order
+- `config.py` defines the study periods and paths; `data.py` builds the analysis cohort
+- `summaries.py`, `did.py`, and `prediction.py` produce descriptive, DiD, and forecasting results
+- `validation.py` checks analysis invariants; `reporting/` writes the final outputs
+- `sample.py` generates deterministic synthetic data for local and CI testing
 
 ## Environment
 
