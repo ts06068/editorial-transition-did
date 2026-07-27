@@ -15,12 +15,12 @@ Estimate changes in observed 1-year citation impact after the 2024 JACC editoria
 
 ## Code structure
 
-- `cli.py` dispatches sample or full mode. `pipeline.py` owns execution order.
-- `config.py` defines dates, windows, and paths. `data.py` builds the analysis frame.
-- `summaries.py` creates descriptive tables. `did.py` runs primary and sensitivity analyses.
-- `prediction.py` handles temporal validation and forecasting.
-- `validation.py` enforces hard checks. `reporting/` writes outputs.
-- `sample.py` supplies deterministic synthetic data for local and CI runs.
+- `cli.py` dispatches sample or full mode
+- `pipeline.py` owns execution order
+- `config.py` defines dates, windows, and paths; `data.py` builds the analysis frame
+- `summaries.py`, `did.py`, and `prediction.py` produce descriptive, DiD, and forecast results
+- `validation.py` enforces hard checks; `reporting/` writes outputs
+- `sample.py` supplies deterministic synthetic data for local and CI runs
 
 ## Environment
 
